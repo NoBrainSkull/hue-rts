@@ -9,7 +9,6 @@ const hueFullPath = `http://${hueRootPath}/${hueApiPath}/`
 
 const hackMiddleWare = function(req, res, next)
 {
-  console.log('Inject date in req.');
   req.requestedTime = new Date();
   next();
 }
@@ -18,7 +17,7 @@ app.get('/test',
   hackMiddleWare,
   function(req, res, next)
   {
-    new Room().light(true);
+    new Room().light(false);
     next();
   },
   function(req, res){
@@ -36,6 +35,7 @@ app.listen(3000, function(){
 
 
 const Client = require('node-rest-client').Client;
+const querystring = require('querystring');
 class Room
 {
   constructor(){
@@ -43,20 +43,37 @@ class Room
   }
 
   light(on){
-    let requestOptions = {
-      "host": `${hueFullPath}groups/1/action`,
+    const req = new HueRequest('groups/1/action', {'on': on});
+    req.exec(resp => console.log(resp));
+  }
+}
+
+class HueRequest
+{
+  constructor(url, data)
+  {
+    this.data = querystring.stringify(data);
+    this.requestOptions = {
+      "host": `${hueFullPath}${url}`,
       "method": "PUT",
       "headers": {
         "Content-Type": "application/json",
-        "Content-Length": 1
-      },
-      "data": { "on": true }
+        "Content-Length": Buffer.byteLength(this.data)
+      }
     };
-    const req = http.request(requestOptions, function(res) {
+  }
+
+  exec(callback)
+  {
+    const req = http.request(this.requestOptions, function(res) {
+      let result = '';
       res.setEncoding("utf8");
-      res.on("data", function (chunk) {
-        console.log("Response: " + chunk);
-      });
+      res.on("data", chunk => result += chunk);
+      res.on('end', () => callback(result))
     });
+
+    req.on('error', e => console.error(`problem with request ${e.message}`));
+    req.write(this.data);
+    req.end();
   }
 }
